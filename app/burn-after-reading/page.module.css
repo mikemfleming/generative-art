@@ -1,30 +1,27 @@
-* {
+.page,
+.page * {
   box-sizing: border-box;
 }
 
-body {
-  margin: 0;
+.page {
+  position: fixed;
+  inset: 0;
   background: #070707;
 }
 
-.fire-page {
-  position: fixed;
-  inset: 0;
-}
-
-.fire-scene {
+.scene {
   position: relative;
   width: 100%;
   height: 100%;
 }
 
-.fire-canvas {
+.canvas {
   display: block;
   width: 100%;
   height: 100%;
 }
 
-.burn-button {
+.burnButton {
   position: absolute;
   bottom: max(24px, env(safe-area-inset-bottom));
   left: 50%;
@@ -34,7 +31,7 @@ body {
   touch-action: manipulation;
 }
 
-.burn-button:focus-visible {
+.burnButton:focus-visible {
   outline: 2px solid #ffd6ad;
   outline-offset: 4px;
 }

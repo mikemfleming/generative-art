@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState } from 'react';
+import styles from './page.module.css';
 
 // Each array position is a temperature, from cold black to hot white.
 const palette = [
@@ -229,20 +230,20 @@ export default function Home() {
   }, [size]);
 
   return (
-    <main className="fire-page">
-      <div className="fire-scene">
+    <main className={styles.page}>
+      <div className={styles.scene}>
       <canvas
         ref={canvasRef}
         width={800}
         height={500}
         role="img"
         aria-label="Animated pixel fire"
-        className="fire-canvas"
+        className={styles.canvas}
       >
         Animated Doom-style fire.
       </canvas>
       <button
-        className="burn-button"
+        className={styles.burnButton}
         type="button"
         disabled={burnState !== 'ready'}
         onClick={() => {

@@ -9,5 +9,4 @@ export default function RootLayout({ children }) {
     </html>
   );
 }
-import './globals.css';
 
