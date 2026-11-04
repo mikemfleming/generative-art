@@ -25,6 +25,8 @@ const bluePalette = [
 const portraitPaths = [
   '/blue-tsunami/41404.png',
   '/blue-tsunami/58352.png',
+  '/blue-tsunami/ann-richards.png',
+  '/blue-tsunami/texas-toast.png',
 ];
 
 function loadPortrait(path) {
@@ -87,6 +89,7 @@ export default function FireScene({ blue = false }) {
     const scale = canvas.height / size.height;
     let foregroundBottom = 0;
     let foregroundHeight = 1;
+    let portraitLayout;
 
     if (blue) {
       if (portraits) {
@@ -96,7 +99,8 @@ export default function FireScene({ blue = false }) {
         )));
         const left = (canvas.width - side * 2 - gap) / 2;
         const top = (canvas.height - side) / 2;
-        portraits.forEach((portrait, index) => {
+        portraitLayout = { left, top, side, gap };
+        portraits.slice(0, 2).forEach((portrait, index) => {
           textCtx.drawImage(portrait, left + index * (side + gap), top, side, side);
         });
         foregroundBottom = top + side;
@@ -161,16 +165,15 @@ export default function FireScene({ blue = false }) {
         textCtx.fillText(line, canvas.width / 2, textTop + index * lineHeight);
       });
     }
-    const pixels = textCtx.getImageData(0, 0, canvas.width, canvas.height).data;
+    const pixels = blue ? null : textCtx.getImageData(0, 0, canvas.width, canvas.height).data;
     const pieces = [];
-    for (let y = 0; y < canvas.height; y += 2) {
+    for (let y = 0; pixels && y < canvas.height; y += 2) {
       for (let x = 0; x < canvas.width; x += 2) {
         const offset = (y * canvas.width + x) * 4;
         const alpha = pixels[offset + 3] / 255;
         if (alpha > 0) {
           pieces.push({
             x, y, alpha,
-            color: blue ? `rgb(${pixels.subarray(offset, offset + 3).join(', ')})` : 'white',
             // Burn upward through the letters with an uneven edge.
             burnAt: Math.max(0, (foregroundBottom - y) / foregroundHeight) * 2000 + Math.random() * 500,
             speed: 20 + Math.random() * 30,
@@ -180,13 +183,12 @@ export default function FireScene({ blue = false }) {
     }
     let burnElapsed = 0;
     let burnFinished = false;
+    let burnStarted = false;
 
     const cellSize = 5;
     const columns = canvas.width / cellSize;
     const rows = canvas.height / cellSize;
     const palette = blue ? bluePalette : warmPalette;
-    const emberColor = blue ? '#58d2ff' : '#ff9b36';
-    const scorchColor = blue ? '#baf8ff' : '#ffe0a0';
     const maxHeat = palette.length - 1;
     let heat = new Array(columns * rows).fill(0);
     let nextHeat = new Array(columns * rows).fill(0);
@@ -218,6 +220,61 @@ export default function FireScene({ blue = false }) {
       nextHeat = previousHeat;
     }
 
+    function drawToastSequence() {
+      const { left, top, side, gap } = portraitLayout;
+      const [, , ann, toast] = portraits;
+      const clamp = value => Math.max(0, Math.min(1, value));
+      const ease = value => value * value * (3 - 2 * value);
+
+      const toastIn = clamp(burnElapsed / 350);
+      const headWidth = Math.min(side * 1.75, canvas.height * 0.65 * ann.width / ann.height);
+      const headHeight = headWidth * ann.height / ann.width;
+      const headX = (canvas.width - headWidth) / 2;
+      const descent = ease(clamp((burnElapsed - 350) / 800));
+      const exit = ease(clamp((burnElapsed - 2700) / 800));
+      const restingY = top - headHeight * 0.78;
+      const headY = -headHeight + (restingY + headHeight) * descent * (1 - exit);
+      const mouthX = headX + headWidth * 0.45;
+      const mouthY = headY + headHeight * 0.47;
+
+      ctx.drawImage(ann, headX, headY, headWidth, headHeight);
+
+      // Open the mouth for each bite, then close it between slices.
+      for (let index = 0; index < 2; index++) {
+        const bite = (burnElapsed - 1250 - index * 650) / 550;
+        if (bite > -0.25 && bite < 1.15) {
+          const opening = Math.min(clamp((bite + 0.25) * 5), clamp((1.15 - bite) * 5));
+          if (opening > 0) {
+            ctx.beginPath();
+            ctx.ellipse(mouthX, mouthY, headWidth * 0.09, headHeight * 0.065 * opening, -0.08, 0, Math.PI * 2);
+            ctx.fillStyle = '#35101c';
+            ctx.strokeStyle = '#b93b57';
+            ctx.lineWidth = Math.max(1, headWidth * 0.012);
+            ctx.fill();
+            ctx.stroke();
+          }
+        }
+
+        const travel = ease(clamp(bite));
+        if (travel >= 1) continue;
+        const startX = left + index * (side + gap) + side / 2;
+        const startY = top + side / 2;
+        const centerX = startX + (mouthX - startX) * travel;
+        const centerY = startY + (mouthY - startY) * travel;
+        const width = side * (1 - travel * 0.9);
+        const inset = width * 0.19 * toastIn;
+        const x = centerX - width / 2;
+        const y = centerY - width / 2;
+
+        ctx.save();
+        ctx.globalAlpha = toastIn;
+        const toastHeight = width * toast.height / toast.width;
+        ctx.drawImage(toast, x, centerY - toastHeight / 2, width, toastHeight);
+        ctx.restore();
+        ctx.drawImage(portraits[index], x + inset, y + inset, width - inset * 2, width - inset * 2);
+      }
+    }
+
     function drawFire() {
       for (let row = 0; row < rows; row++) {
         for (let column = 0; column < columns; column++) {
@@ -228,21 +285,25 @@ export default function FireScene({ blue = false }) {
         }
       }
 
-      if (blue && !burnRequested.current) {
-        ctx.drawImage(textCanvas, 0, 0);
+      if (blue) {
+        if (!burnStarted) {
+          ctx.drawImage(textCanvas, 0, 0);
+        } else if (portraitLayout && !burnFinished) {
+          drawToastSequence();
+        }
         return;
       }
 
       // Draw every outline before any letter fills so neighboring pieces
       // cannot cast dark seams over letters that have already been drawn.
       const outline = 2 * scale;
-      for (const pass of blue ? ['fill'] : ['outline', 'fill']) {
+      for (const pass of ['outline', 'fill']) {
         for (const piece of pieces) {
-        const age = burnRequested.current ? burnElapsed - piece.burnAt : -Infinity;
+        const age = burnStarted ? burnElapsed - piece.burnAt : -Infinity;
         if (age >= 800) continue;
         ctx.globalAlpha = piece.alpha * (age > 0 ? 1 - age / 800 : 1);
         ctx.fillStyle = pass === 'outline' ? '#070707'
-          : age > -180 ? (age > 0 ? emberColor : scorchColor) : piece.color;
+          : age > -180 ? (age > 0 ? '#ff9b36' : '#ffe0a0') : 'white';
         const travel = Math.max(0, age) / 1000;
         const border = pass === 'outline' ? outline : 0;
         ctx.fillRect(
@@ -267,8 +328,15 @@ export default function FireScene({ blue = false }) {
       accumulatedTime += elapsed;
       previousTime = time;
 
-      if (burnRequested.current && !burnFinished) {
-        burnElapsed += elapsed;
+      if (burnRequested.current) {
+        burnRequested.current = false;
+        burnElapsed = 0;
+        burnFinished = false;
+        burnStarted = true;
+      }
+
+      if (burnStarted && !burnFinished) {
+        burnElapsed += elapsed * (blue ? 0.85 : 1);
         if (burnElapsed >= 3500) {
           burnFinished = true;
           setBurnState('burned');
@@ -297,7 +365,7 @@ export default function FireScene({ blue = false }) {
         width={800}
         height={500}
         role="img"
-        aria-label={blue ? "Two portraits over animated blue flames" : "Animated pixel fire"}
+        aria-label={blue ? "Animated blue flames with two portraits on toast and Ann Richards" : "Animated pixel fire"}
         className={styles.canvas}
       >
         Animated Doom-style fire.
@@ -305,7 +373,7 @@ export default function FireScene({ blue = false }) {
       <button
         className={styles.burnButton}
         type="button"
-        disabled={burnState !== 'ready' || (blue && !portraits)}
+        disabled={blue ? !portraits || burnState === 'burning' : burnState !== 'ready'}
         onClick={() => {
           burnRequested.current = true;
           setBurnState('burning');
@@ -317,12 +385,12 @@ export default function FireScene({ blue = false }) {
           border: '1px solid #8d4826',
           borderRadius: 6,
           font: '16px monospace',
-          cursor: burnState === 'ready' ? 'pointer' : 'default',
-          opacity: burnState === 'ready' ? 1 : 0.6,
+          cursor: burnState === 'ready' || (blue && burnState === 'burned') ? 'pointer' : 'default',
+          opacity: burnState === 'ready' || (blue && burnState === 'burned') ? 1 : 0.6,
         }}
       >
         {blue
-          ? (imageError ? 'Images unavailable' : 'Take out the trash')
+          ? (imageError ? 'Images unavailable' : 'They’re toast')
           : (burnState === 'ready' ? 'Burn text' : burnState === 'burning' ? 'Burning…' : 'Burned away')}
       </button>
       </div>
